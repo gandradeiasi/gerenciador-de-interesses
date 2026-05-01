@@ -1,0 +1,315 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Interesses - Ranking ELO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        .sortable-item {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            touch-action: none; /* Melhora suporte mobile */
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+
+    <div class="max-w-2xl mx-auto p-4 md:p-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-indigo-700 mb-2">Ranking de Interesses</h1>
+            <p class="text-slate-500 italic">Insira itens, ordene-os e refine sua lista</p>
+        </header>
+
+        <!-- Seção de Entrada -->
+        <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+            <div class="flex gap-2">
+                <input type="text" id="itemInput" placeholder="Digite algo novo..." 
+                    class="flex-1 px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all bg-white text-slate-900">
+                <button id="btnAdd" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors">
+                    Adicionar
+                </button>
+            </div>
+            <p id="counterMsg" class="mt-2 text-xs text-slate-400"></p>
+        </section>
+
+        <!-- Seção de Ações Especiais -->
+        <div class="flex gap-4 mb-8">
+            <button id="btnSortear" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2">
+                <span>🎁</span> Sortear Melhor Item
+            </button>
+        </div>
+
+        <!-- Lista de Ranking (Visualização) -->
+        <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-xl font-semibold mb-4 flex items-center justify-between">
+                Ranking Atual 
+                <span id="totalCount" class="text-sm font-normal text-slate-500">0 itens</span>
+            </h2>
+            <div id="rankingList" class="space-y-2">
+                <!-- Itens injetados via JS -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal de Ordenação (Elo Challenge) -->
+    <div id="modalOrdenacao" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-xl font-bold mb-2">Duelo de Interesses!</h3>
+            <p class="text-sm text-slate-500 mb-6">Arraste os itens para colocar o melhor no topo e o pior embaixo.</p>
+            
+            <div id="sortableList" class="space-y-3 mb-8">
+                <!-- Itens para ordenar aqui -->
+            </div>
+
+            <button id="confirmarOrdenacao" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition-all">
+                Confirmar Ranking
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de Resultado do Sorteio -->
+    <div id="modalSorteio" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-8 text-center shadow-2xl">
+            <div class="text-5xl mb-4">🏆</div>
+            <h3 class="text-lg font-semibold text-slate-500 uppercase tracking-widest mb-2">Vencedor Escolhido</h3>
+            <div id="winnerContent" class="text-2xl font-bold text-indigo-700 p-4 bg-indigo-50 rounded-lg border-2 border-indigo-100 mb-6 break-words">
+                Texto aqui
+            </div>
+            <div class="flex flex-col gap-2">
+                <button id="btnCopy" class="bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg transition-all flex items-center justify-center gap-2">
+                    Copiar Texto
+                </button>
+                <button id="btnCloseSorteio" class="text-slate-400 hover:text-slate-600 text-sm mt-2">Fechar e remover da lista</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Estado da Aplicação ---
+        let items = JSON.parse(localStorage.getItem('elo_items')) || [];
+        let insertCounter = parseInt(localStorage.getItem('elo_counter')) || 0;
+        const K_FACTOR = 32;
+
+        // --- Seletores ---
+        const itemInput = document.getElementById('itemInput');
+        const btnAdd = document.getElementById('btnAdd');
+        const rankingList = document.getElementById('rankingList');
+        const counterMsg = document.getElementById('counterMsg');
+        const totalCount = document.getElementById('totalCount');
+        const modalOrdenacao = document.getElementById('modalOrdenacao');
+        const sortableList = document.getElementById('sortableList');
+        const btnConfirmarOrdenacao = document.getElementById('confirmarOrdenacao');
+        const btnSortear = document.getElementById('btnSortear');
+        const modalSorteio = document.getElementById('modalSorteio');
+        const winnerContent = document.getElementById('winnerContent');
+        const btnCopy = document.getElementById('btnCopy');
+        const btnCloseSorteio = document.getElementById('btnCloseSorteio');
+
+        // --- Funções Principais ---
+
+        function saveData() {
+            localStorage.setItem('elo_items', JSON.stringify(items));
+            localStorage.setItem('elo_counter', insertCounter.toString());
+            renderRanking();
+        }
+
+        function addItem() {
+            const text = itemInput.value.trim();
+            if (!text) return;
+
+            items.push({
+                id: Date.now() + Math.random(),
+                text: text,
+                elo: 800
+            });
+
+            itemInput.value = '';
+            insertCounter++;
+            
+            if (insertCounter >= 5) {
+                openSortingChallenge();
+                insertCounter = 0;
+            }
+            
+            updateCounterDisplay();
+            saveData();
+            itemInput.focus();
+        }
+
+        function updateCounterDisplay() {
+            const faltam = 5 - insertCounter;
+            counterMsg.innerText = `${faltam} adições para o próximo desafio de ordenação.`;
+        }
+
+        function renderRanking() {
+            const sorted = [...items].sort((a, b) => b.elo - a.elo);
+            totalCount.innerText = `${items.length} itens`;
+            
+            rankingList.innerHTML = sorted.map((item, index) => `
+                <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <span class="text-xs font-bold text-slate-400 w-6 flex-shrink-0">${index + 1}º</span>
+                        <span class="font-medium text-slate-700 truncate">${item.text}</span>
+                    </div>
+                    <span class="text-xs font-mono bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full flex-shrink-0">
+                        ${Math.round(item.elo)}
+                    </span>
+                </div>
+            `).join('');
+
+            if(items.length === 0) {
+                rankingList.innerHTML = '<p class="text-center text-slate-400 py-4 text-sm">Nenhum item cadastrado ainda.</p>';
+            }
+        }
+
+        // --- Lógica de ELO ---
+
+        function calculateExpectedScore(eloA, eloB) {
+            return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
+        }
+
+        function updateEloPair(winner, loser) {
+            const expectedA = calculateExpectedScore(winner.elo, loser.elo);
+            const expectedB = calculateExpectedScore(loser.elo, winner.elo);
+            
+            winner.elo = winner.elo + K_FACTOR * (1 - expectedA);
+            loser.elo = loser.elo + K_FACTOR * (0 - expectedB);
+        }
+
+        // --- Sistema de Desafio (Ordenação) ---
+
+        let activeChallengeItems = [];
+
+        function openSortingChallenge() {
+            if (items.length < 2) return;
+            
+            const count = Math.min(items.length, 5);
+            const shuffled = [...items].sort(() => 0.5 - Math.random());
+            activeChallengeItems = shuffled.slice(0, count);
+
+            renderSortableItems();
+            modalOrdenacao.classList.remove('hidden');
+        }
+
+        function renderSortableItems() {
+            sortableList.innerHTML = '';
+            activeChallengeItems.forEach(item => {
+                const div = document.createElement('div');
+                div.draggable = true;
+                div.dataset.id = item.id;
+                div.className = "sortable-item cursor-grab active:cursor-grabbing p-4 bg-indigo-50 border border-indigo-200 rounded-xl font-bold text-indigo-900 flex justify-between items-center shadow-sm";
+                div.innerHTML = `${item.text} <span class="text-indigo-300">☰</span>`;
+                
+                div.addEventListener('dragstart', () => div.classList.add('dragging'));
+                div.addEventListener('dragend', () => div.classList.remove('dragging'));
+                
+                sortableList.appendChild(div);
+            });
+            setupDraggableLogic();
+        }
+
+        function setupDraggableLogic() {
+            sortableList.addEventListener('dragover', e => {
+                e.preventDefault();
+                const afterElement = getDragAfterElement(sortableList, e.clientY);
+                const dragging = document.querySelector('.dragging');
+                if (dragging) {
+                    if (afterElement == null) {
+                        sortableList.appendChild(dragging);
+                    } else {
+                        sortableList.insertBefore(dragging, afterElement);
+                    }
+                }
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.sortable-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        btnConfirmarOrdenacao.onclick = () => {
+            const orderedIds = [...sortableList.querySelectorAll('.sortable-item')].map(el => parseFloat(el.dataset.id));
+            
+            for (let i = 0; i < orderedIds.length; i++) {
+                for (let j = i + 1; j < orderedIds.length; j++) {
+                    const winnerId = orderedIds[i];
+                    const loserId = orderedIds[j];
+                    
+                    const winner = items.find(it => it.id === winnerId);
+                    const loser = items.find(it => it.id === loserId);
+                    
+                    if (winner && loser) {
+                        updateEloPair(winner, loser);
+                    }
+                }
+            }
+
+            modalOrdenacao.classList.add('hidden');
+            saveData();
+        };
+
+        // --- Sorteio de Melhor ---
+
+        btnSortear.onclick = () => {
+            if (items.length === 0) return;
+            const sorted = [...items].sort((a, b) => b.elo - a.elo);
+            const winner = sorted[0];
+            winnerContent.innerText = winner.text;
+            modalSorteio.classList.remove('hidden');
+        };
+
+        btnCopy.onclick = () => {
+            const text = winnerContent.innerText;
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            
+            btnCopy.innerText = "Copiado!";
+            setTimeout(() => btnCopy.innerText = "Copiar Texto", 2000);
+        };
+
+        btnCloseSorteio.onclick = () => {
+            const sorted = [...items].sort((a, b) => b.elo - a.elo);
+            if (sorted.length > 0) {
+                const idToRemove = sorted[0].id;
+                items = items.filter(it => it.id !== idToRemove);
+            }
+            modalSorteio.classList.add('hidden');
+            saveData();
+        };
+
+        // --- Eventos de Inicialização ---
+
+        btnAdd.onclick = addItem;
+        itemInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addItem();
+            }
+        };
+
+        // Inicialização
+        updateCounterDisplay();
+        renderRanking();
+        itemInput.focus();
+
+    </script>
+</body>
+</html>
