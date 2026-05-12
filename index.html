@@ -1,315 +1,306 @@
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciador de Interesses - Ranking ELO</title>
+    <title>Ranking Elo Dinâmico</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .dragging {
-            opacity: 0.5;
-            transform: scale(0.95);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
         }
-        .sortable-item {
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            touch-action: none; /* Melhora suporte mobile */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+<body class="p-4 md:p-8">
 
-    <div class="max-w-2xl mx-auto p-4 md:p-8">
+    <div class="max-w-2xl mx-auto">
+        <!-- Cabeçalho -->
         <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-indigo-700 mb-2">Ranking de Interesses</h1>
-            <p class="text-slate-500 italic">Insira itens, ordene-os e refine sua lista</p>
+            <h1 class="text-3xl font-bold text-slate-800">Ranking Elo</h1>
+            <p class="text-slate-500">Decisões instantâneas e engajamento 50/50</p>
         </header>
 
-        <!-- Seção de Entrada -->
-        <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+        <!-- Área de Input -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
             <div class="flex gap-2">
-                <input type="text" id="itemInput" placeholder="Digite algo novo..." 
-                    class="flex-1 px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all bg-white text-slate-900">
-                <button id="btnAdd" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors">
+                <input type="text" id="itemInput" placeholder="Digite o nome do item e aperte Enter..." 
+                    class="flex-1 px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                <button onclick="addItem()" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors">
                     Adicionar
                 </button>
             </div>
-            <p id="counterMsg" class="mt-2 text-xs text-slate-400"></p>
-        </section>
+            <p id="limitWarning" class="text-xs text-slate-400 mt-2 text-center hidden">
+                Nota: Ao atingir 20 itens, apenas o Top 10 será mantido.
+            </p>
+        </div>
 
-        <!-- Seção de Ações Especiais -->
-        <div class="flex gap-4 mb-8">
-            <button id="btnSortear" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2">
-                <span>🎁</span> Sortear Melhor Item
+        <!-- Ação de Seleção Imprevisível (50/50) -->
+        <div id="topActionContainer" class="hidden mb-6">
+            <button onclick="pickAndRemoveHybrid()" 
+                class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all transform active:scale-95 group">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Obter Próximo Destaque</span>
+                </div>
+                <span class="text-[10px] uppercase tracking-widest opacity-80 group-hover:opacity-100 italic">Algoritmo 50/50</span>
             </button>
         </div>
 
-        <!-- Lista de Ranking (Visualização) -->
-        <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 class="text-xl font-semibold mb-4 flex items-center justify-between">
-                Ranking Atual 
-                <span id="totalCount" class="text-sm font-normal text-slate-500">0 itens</span>
-            </h2>
-            <div id="rankingList" class="space-y-2">
-                <!-- Itens injetados via JS -->
+        <!-- Lista de Ranking -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between text-sm font-semibold text-slate-600">
+                <span>ITEM</span>
+                <span>ELO RATING</span>
             </div>
-        </section>
-    </div>
-
-    <!-- Modal de Ordenação (Elo Challenge) -->
-    <div id="modalOrdenacao" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
-            <h3 class="text-xl font-bold mb-2">Duelo de Interesses!</h3>
-            <p class="text-sm text-slate-500 mb-6">Arraste os itens para colocar o melhor no topo e o pior embaixo.</p>
-            
-            <div id="sortableList" class="space-y-3 mb-8">
-                <!-- Itens para ordenar aqui -->
+            <ul id="rankingList" class="divide-y divide-slate-100"></ul>
+            <div id="emptyState" class="p-12 text-center text-slate-400">
+                Nenhum item adicionado ainda.
             </div>
+        </div>
 
-            <button id="confirmarOrdenacao" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition-all">
-                Confirmar Ranking
+        <!-- Botão para limpar tudo -->
+        <div class="mt-8 text-center">
+            <button onclick="clearAllData()" class="text-xs text-red-400 hover:text-red-600 underline transition-colors">
+                Limpar todos os dados salvos
             </button>
         </div>
     </div>
 
-    <!-- Modal de Resultado do Sorteio -->
-    <div id="modalSorteio" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-sm rounded-2xl p-8 text-center shadow-2xl">
-            <div class="text-5xl mb-4">🏆</div>
-            <h3 class="text-lg font-semibold text-slate-500 uppercase tracking-widest mb-2">Vencedor Escolhido</h3>
-            <div id="winnerContent" class="text-2xl font-bold text-indigo-700 p-4 bg-indigo-50 rounded-lg border-2 border-indigo-100 mb-6 break-words">
-                Texto aqui
+    <!-- Modal de Duelo -->
+    <div id="duelModal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden">
+        <div class="bg-white w-full max-w-md mx-4 rounded-3xl shadow-2xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100">
+                <h2 class="text-xl font-bold text-slate-800">Duelos de Equilíbrio</h2>
+                <p class="text-sm text-slate-500">Escolha o vencedor para fechar</p>
             </div>
-            <div class="flex flex-col gap-2">
-                <button id="btnCopy" class="bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg transition-all flex items-center justify-center gap-2">
-                    Copiar Texto
-                </button>
-                <button id="btnCloseSorteio" class="text-slate-400 hover:text-slate-600 text-sm mt-2">Fechar e remover da lista</button>
+            <div id="duelContainer" class="p-6 space-y-6">
+                <!-- Duelos injetados via JS -->
+            </div>
+            <div class="p-4 bg-slate-50 flex justify-end">
+                <button onclick="closeModal()" class="text-slate-500 hover:text-slate-700 font-medium px-4 py-2">Pular</button>
             </div>
         </div>
+    </div>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg opacity-0 transition-opacity pointer-events-none z-[60] text-center min-w-[200px]">
+        Copiado!
     </div>
 
     <script>
-        // --- Estado da Aplicação ---
-        let items = JSON.parse(localStorage.getItem('elo_items')) || [];
-        let insertCounter = parseInt(localStorage.getItem('elo_counter')) || 0;
-        const K_FACTOR = 32;
+        let items = JSON.parse(localStorage.getItem('elo_ranking_data')) || [];
+        const K = 32;
 
-        // --- Seletores ---
-        const itemInput = document.getElementById('itemInput');
-        const btnAdd = document.getElementById('btnAdd');
-        const rankingList = document.getElementById('rankingList');
-        const counterMsg = document.getElementById('counterMsg');
-        const totalCount = document.getElementById('totalCount');
-        const modalOrdenacao = document.getElementById('modalOrdenacao');
-        const sortableList = document.getElementById('sortableList');
-        const btnConfirmarOrdenacao = document.getElementById('confirmarOrdenacao');
-        const btnSortear = document.getElementById('btnSortear');
-        const modalSorteio = document.getElementById('modalSorteio');
-        const winnerContent = document.getElementById('winnerContent');
-        const btnCopy = document.getElementById('btnCopy');
-        const btnCloseSorteio = document.getElementById('btnCloseSorteio');
-
-        // --- Funções Principais ---
-
-        function saveData() {
-            localStorage.setItem('elo_items', JSON.stringify(items));
-            localStorage.setItem('elo_counter', insertCounter.toString());
+        window.onload = () => {
             renderRanking();
+            updateLimitWarning();
+
+            // Adiciona suporte ao Enter
+            document.getElementById('itemInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    addItem();
+                }
+            });
+        };
+
+        function saveToLocalStorage() {
+            localStorage.setItem('elo_ranking_data', JSON.stringify(items));
         }
 
         function addItem() {
-            const text = itemInput.value.trim();
+            const input = document.getElementById('itemInput');
+            const text = input.value.trim();
             if (!text) return;
 
-            items.push({
-                id: Date.now() + Math.random(),
-                text: text,
-                elo: 800
-            });
-
-            itemInput.value = '';
-            insertCounter++;
-            
-            if (insertCounter >= 5) {
-                openSortingChallenge();
-                insertCounter = 0;
+            let initialElo = 1500;
+            if (items.length > 0) {
+                const sum = items.reduce((acc, curr) => acc + curr.elo, 0);
+                initialElo = Math.round(sum / items.length);
             }
-            
-            updateCounterDisplay();
-            saveData();
-            itemInput.focus();
+
+            const newItem = { id: Date.now() + Math.random(), text: text, elo: initialElo };
+            items.push(newItem);
+            input.value = '';
+
+            checkAndPruneList();
+            saveToLocalStorage();
+            renderRanking();
+            setupDuels(newItem);
+            updateLimitWarning();
         }
 
-        function updateCounterDisplay() {
-            const faltam = 5 - insertCounter;
-            counterMsg.innerText = `${faltam} adições para o próximo desafio de ordenação.`;
+        function checkAndPruneList() {
+            if (items.length >= 20) {
+                items.sort((a, b) => b.elo - a.elo);
+                items = items.slice(0, 10);
+                showToast("Lista reduzida para o Top 10.");
+                saveToLocalStorage();
+            }
+        }
+
+        function updateLimitWarning() {
+            const warning = document.getElementById('limitWarning');
+            if (items.length >= 15) {
+                warning.classList.remove('hidden');
+                warning.innerText = `Itens: ${items.length}/20.`;
+            } else {
+                warning.classList.add('hidden');
+            }
+        }
+
+        function calculateNewElo(winner, loser) {
+            const expectedWinner = 1 / (1 + Math.pow(10, (loser.elo - winner.elo) / 400));
+            const expectedLoser = 1 / (1 + Math.pow(10, (winner.elo - loser.elo) / 400));
+            winner.elo = Math.round(winner.elo + K * (1 - expectedWinner));
+            loser.elo = Math.round(loser.elo + K * (0 - expectedLoser));
+            saveToLocalStorage();
+        }
+
+        function setupDuels(newlyAddedItem) {
+            const itemExists = items.find(i => i.id === newlyAddedItem.id);
+            if (items.length < 2 || !itemExists) return;
+
+            const modal = document.getElementById('duelModal');
+            const container = document.getElementById('duelContainer');
+            container.innerHTML = '';
+
+            const duelsCount = Math.min(2, items.length - 1);
+            const opponents = [...items].filter(i => i.id !== newlyAddedItem.id);
+            opponents.sort(() => Math.random() - 0.5);
+
+            for (let i = 0; i < duelsCount; i++) {
+                const opponent = opponents[i];
+                const duelDiv = document.createElement('div');
+                duelDiv.className = 'duel-row flex flex-col gap-2';
+                duelDiv.dataset.resolved = "false"; // Atributo para controle de fechamento
+                
+                duelDiv.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <button onclick="handleWinner('${newlyAddedItem.id}', '${opponent.id}', this)" 
+                            class="flex-1 bg-white border-2 border-slate-100 p-3 rounded-xl font-semibold text-slate-700 active:bg-blue-600 active:text-white transition-colors duration-75">
+                            ${newlyAddedItem.text}
+                        </button>
+                        <span class="text-[10px] font-bold text-slate-300">VS</span>
+                        <button onclick="handleWinner('${opponent.id}', '${newlyAddedItem.id}', this)" 
+                            class="flex-1 bg-white border-2 border-slate-100 p-3 rounded-xl font-semibold text-slate-700 active:bg-blue-600 active:text-white transition-colors duration-75">
+                            ${opponent.text}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(duelDiv);
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function handleWinner(winnerId, loserId, buttonElement) {
+            const winner = items.find(i => i.id == winnerId);
+            const loser = items.find(i => i.id == loserId);
+
+            if (winner && loser) {
+                calculateNewElo(winner, loser);
+            }
+            
+            // Marca o duelo como resolvido via atributo data
+            const row = buttonElement.closest('.duel-row');
+            row.dataset.resolved = "true";
+            row.style.opacity = '0.2';
+            row.style.pointerEvents = 'none';
+
+            // Verifica se todos os duelos foram resolvidos
+            const allRows = document.querySelectorAll('.duel-row');
+            const allResolved = Array.from(allRows).every(r => r.dataset.resolved === "true");
+            
+            if (allResolved) {
+                closeModal(); 
+            }
+
+            renderRanking();
+        }
+
+        function closeModal() {
+            document.getElementById('duelModal').classList.add('hidden');
         }
 
         function renderRanking() {
-            const sorted = [...items].sort((a, b) => b.elo - a.elo);
-            totalCount.innerText = `${items.length} itens`;
+            const list = document.getElementById('rankingList');
+            const emptyState = document.getElementById('emptyState');
+            const topAction = document.getElementById('topActionContainer');
             
-            rankingList.innerHTML = sorted.map((item, index) => `
-                <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
-                    <div class="flex items-center gap-3 overflow-hidden">
-                        <span class="text-xs font-bold text-slate-400 w-6 flex-shrink-0">${index + 1}º</span>
-                        <span class="font-medium text-slate-700 truncate">${item.text}</span>
-                    </div>
-                    <span class="text-xs font-mono bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full flex-shrink-0">
-                        ${Math.round(item.elo)}
-                    </span>
-                </div>
-            `).join('');
-
-            if(items.length === 0) {
-                rankingList.innerHTML = '<p class="text-center text-slate-400 py-4 text-sm">Nenhum item cadastrado ainda.</p>';
+            items.sort((a, b) => b.elo - a.elo);
+            list.innerHTML = '';
+            
+            if (items.length === 0) {
+                emptyState.classList.remove('hidden');
+                topAction.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                topAction.classList.remove('hidden');
+                items.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = `flex justify-between items-center px-6 py-4 ${index === 0 ? 'bg-amber-50/30' : ''}`;
+                    li.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <span class="font-bold text-lg w-6 ${index === 0 ? 'text-amber-500' : 'text-slate-300'}">#${index + 1}</span>
+                            <span class="font-medium text-slate-700">${item.text}</span>
+                        </div>
+                        <span class="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg text-xs">${item.elo}</span>
+                    `;
+                    list.appendChild(li);
+                });
             }
         }
 
-        // --- Lógica de ELO ---
-
-        function calculateExpectedScore(eloA, eloB) {
-            return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
-        }
-
-        function updateEloPair(winner, loser) {
-            const expectedA = calculateExpectedScore(winner.elo, loser.elo);
-            const expectedB = calculateExpectedScore(loser.elo, winner.elo);
-            
-            winner.elo = winner.elo + K_FACTOR * (1 - expectedA);
-            loser.elo = loser.elo + K_FACTOR * (0 - expectedB);
-        }
-
-        // --- Sistema de Desafio (Ordenação) ---
-
-        let activeChallengeItems = [];
-
-        function openSortingChallenge() {
-            if (items.length < 2) return;
-            
-            const count = Math.min(items.length, 5);
-            const shuffled = [...items].sort(() => 0.5 - Math.random());
-            activeChallengeItems = shuffled.slice(0, count);
-
-            renderSortableItems();
-            modalOrdenacao.classList.remove('hidden');
-        }
-
-        function renderSortableItems() {
-            sortableList.innerHTML = '';
-            activeChallengeItems.forEach(item => {
-                const div = document.createElement('div');
-                div.draggable = true;
-                div.dataset.id = item.id;
-                div.className = "sortable-item cursor-grab active:cursor-grabbing p-4 bg-indigo-50 border border-indigo-200 rounded-xl font-bold text-indigo-900 flex justify-between items-center shadow-sm";
-                div.innerHTML = `${item.text} <span class="text-indigo-300">☰</span>`;
-                
-                div.addEventListener('dragstart', () => div.classList.add('dragging'));
-                div.addEventListener('dragend', () => div.classList.remove('dragging'));
-                
-                sortableList.appendChild(div);
-            });
-            setupDraggableLogic();
-        }
-
-        function setupDraggableLogic() {
-            sortableList.addEventListener('dragover', e => {
-                e.preventDefault();
-                const afterElement = getDragAfterElement(sortableList, e.clientY);
-                const dragging = document.querySelector('.dragging');
-                if (dragging) {
-                    if (afterElement == null) {
-                        sortableList.appendChild(dragging);
-                    } else {
-                        sortableList.insertBefore(dragging, afterElement);
-                    }
-                }
-            });
-        }
-
-        function getDragAfterElement(container, y) {
-            const draggableElements = [...container.querySelectorAll('.sortable-item:not(.dragging)')];
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-        }
-
-        btnConfirmarOrdenacao.onclick = () => {
-            const orderedIds = [...sortableList.querySelectorAll('.sortable-item')].map(el => parseFloat(el.dataset.id));
-            
-            for (let i = 0; i < orderedIds.length; i++) {
-                for (let j = i + 1; j < orderedIds.length; j++) {
-                    const winnerId = orderedIds[i];
-                    const loserId = orderedIds[j];
-                    
-                    const winner = items.find(it => it.id === winnerId);
-                    const loser = items.find(it => it.id === loserId);
-                    
-                    if (winner && loser) {
-                        updateEloPair(winner, loser);
-                    }
-                }
-            }
-
-            modalOrdenacao.classList.add('hidden');
-            saveData();
-        };
-
-        // --- Sorteio de Melhor ---
-
-        btnSortear.onclick = () => {
+        function pickAndRemoveHybrid() {
             if (items.length === 0) return;
-            const sorted = [...items].sort((a, b) => b.elo - a.elo);
-            const winner = sorted[0];
-            winnerContent.innerText = winner.text;
-            modalSorteio.classList.remove('hidden');
-        };
+            items.sort((a, b) => b.elo - a.elo);
+            let selectedIndex = 0;
+            if (items.length > 1 && Math.random() >= 0.5) {
+                selectedIndex = Math.floor(Math.random() * (items.length - 1)) + 1;
+            }
 
-        btnCopy.onclick = () => {
-            const text = winnerContent.innerText;
+            const selectedItem = items[selectedIndex];
+            
+            // Copiar
             const tempInput = document.createElement('input');
-            tempInput.value = text;
+            tempInput.value = selectedItem.text;
             document.body.appendChild(tempInput);
             tempInput.select();
             document.execCommand('copy');
             document.body.removeChild(tempInput);
+
+            // Deletar
+            items = items.filter(i => i.id !== selectedItem.id);
+            saveToLocalStorage();
             
-            btnCopy.innerText = "Copiado!";
-            setTimeout(() => btnCopy.innerText = "Copiar Texto", 2000);
-        };
+            showToast(selectedIndex === 0 ? "Top 1 copiado!" : "Item surpresa copiado!");
+            renderRanking();
+            updateLimitWarning();
+        }
 
-        btnCloseSorteio.onclick = () => {
-            const sorted = [...items].sort((a, b) => b.elo - a.elo);
-            if (sorted.length > 0) {
-                const idToRemove = sorted[0].id;
-                items = items.filter(it => it.id !== idToRemove);
+        function clearAllData() {
+            if (confirm("Apagar tudo?")) {
+                items = [];
+                localStorage.removeItem('elo_ranking_data');
+                renderRanking();
+                updateLimitWarning();
             }
-            modalSorteio.classList.add('hidden');
-            saveData();
-        };
+        }
 
-        // --- Eventos de Inicialização ---
-
-        btnAdd.onclick = addItem;
-        itemInput.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addItem();
-            }
-        };
-
-        // Inicialização
-        updateCounterDisplay();
-        renderRanking();
-        itemInput.focus();
-
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+        }
     </script>
 </body>
 </html>
