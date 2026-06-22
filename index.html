@@ -159,7 +159,7 @@
       rankings: {} // Objeto indexado por id do separador contendo arrays de strings
     };
     
-    // Estado do algoritmo de inserção ativa
+    // Estado do algoritmo de inserção activa
     let insertionState = {
       active: false,
       newItem: '',
@@ -237,7 +237,7 @@
           : "text-xs uppercase tracking-widest font-medium text-neutral-500 hover:text-neutral-300";
         labelBtn.textContent = tab.name;
         
-        // Se já estiver ativo, clica para editar. Caso contrário, clica para alternar.
+        // Se já estiver activo, clica para editar. Caso contrário, clica para alternar.
         labelBtn.onclick = (e) => {
           e.preventDefault();
           if (isActive) {
@@ -249,7 +249,7 @@
 
         tabEl.appendChild(labelBtn);
 
-        // Ícone de eliminação para separadores ativos (apenas se houver mais de um separador no total)
+        // Ícone de eliminação para separadores activos (apenas se houver mais de um separador no total)
         if (isActive && appState.tabs.length > 1) {
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
@@ -366,7 +366,7 @@
         appState.tabs.splice(index, 1);
         delete appState.rankings[tabId];
         
-        // Se eliminou o separador ativo, migra para o primeiro separador disponível
+        // Se eliminou o separador activo, migra para o primeiro separador disponível
         if (appState.activeTabId === tabId) {
           appState.activeTabId = appState.tabs[0].id;
         }
@@ -375,7 +375,7 @@
       }
     }
 
-    // --- Renderização dos Itens do Separador Ativo ---
+    // --- Renderização dos Itens do Separador Activo ---
     function render() {
       renderTabs();
       
@@ -454,7 +454,7 @@
         return;
       }
 
-      // Configura o estado inicial do algoritmo baseado no separador ativo
+      // Configura o estado inicial do algoritmo baseado no separador activo
       insertionState = {
         active: true,
         newItem: name,
@@ -503,9 +503,14 @@
       if (insertionState.isComparingLast) {
         // Primeira comparação: com o último item
         if (!newWins) {
-          // Perdeu do último item -> Eliminado no momento
-          triggerElimination();
-          finishInsertionFlow(false);
+          if (n >= 7) {
+            // Perdeu do último item e a lista está no limite (7 itens) -> Eliminado no momento
+            triggerElimination();
+            finishInsertionFlow(false);
+          } else {
+            // Perdeu do último item mas há espaço -> Adiciona à última posição
+            finishInsertionFlow(true, n);
+          }
         } else {
           // Venceu o último item -> Prossegue com a comparação binária tradicional
           insertionState.isComparingLast = false;
@@ -560,7 +565,7 @@
         render();
       }
       
-      // Repor estado de inserção ativa
+      // Repor estado de inserção activa
       insertionState = {
         active: false,
         newItem: '',
